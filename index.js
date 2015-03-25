@@ -145,8 +145,10 @@ module.exports = function(opts) {
     return ' (' + ((parseInt(index, 10) || 0) + 1) + ')' + (ext || '');
   };
   var FileInfo = function(file) {
-    this.uniqName = uuid.v4();
-    this.name = this.uniqName + path.extname(file.name);
+
+    this.name = file.name;
+
+
     this.size = file.size;
     this.type = file.type;
     this.modified = file.lastMod;
@@ -155,11 +157,15 @@ module.exports = function(opts) {
 
   FileInfo.prototype.safeName = function() {
     // Prevent directory traversal and creating hidden system files:
-    this.name = path.basename(this.name).replace(/^\.+/, '');
+    //this.name = path.basename(this.name).replace(/^\.+/, '');
+    this.uniqName = uuid.v4();
+    this.name = this.uniqName + path.extname(this.name);
 
     // Prevent overwriting existing files:
     while (_existsSync(options.uploadDir + '/' + this.name)) {
-      this.name = this.name.replace(nameCountRegexp, nameCountFunc);
+      //this.name = this.name.replace(nameCountRegexp, nameCountFunc);
+      this.uniqName = uuid.v4();
+      this.name = this.uniqName + path.extname(this.name);
     }
   };
 
@@ -169,8 +175,11 @@ module.exports = function(opts) {
       if (!sss) {
         var baseUrl = (options.useSSL ? 'https:' : 'http:') +
           '//' + req.headers.host + options.uploadUrl;
+        console.log("real name : "+that.name);
+        console.log("encoded name : "+encodeURIComponent(that.name));
         that.url = baseUrl + encodeURIComponent(that.name);
         that.deleteUrl = baseUrl + encodeURIComponent(that.name);
+        that.thumbnailUrl = baseUrl +'thumbnail/' +that.name;
         Object.keys(options.imageVersions).forEach(function(version) {
           if (_existsSync(
               options.uploadDir + '/' + version + '/' + that.name
@@ -209,6 +218,11 @@ module.exports = function(opts) {
   }
   var fileUploader = {};
 
+  var getBaseURL= function(req){
+    return (options.useSSL ? 'https:' : 'http:') +
+      '//' + req.headers.host + options.uploadUrl;
+  };
+
   fileUploader.get = function(req, res, callback) {
     setNoCacheHeaders(res);
     var files = [];
@@ -221,7 +235,8 @@ module.exports = function(opts) {
             fileInfo = new FileInfo({
               name: name,
               size: stats.size,
-              lastMod: stats.mtime
+              lastMod: stats.mtime,
+              thumbnailUrl: getBaseURL(req)+'/thumbnail/'+name
             });
             fileInfo.initUrls(req);
             files.push(fileInfo);
@@ -264,20 +279,20 @@ module.exports = function(opts) {
   };
 
 
-  fileUploader.loadFileInfo = function(req, res, callback) {
-    name = req.params.name;
+  fileUploader.loadImg = function(req, res, filename, callback) {
     setNoCacheHeaders(res);
     var files = [];
     if (options.storage.type == 'local') {
 
-        var stats = fs.statSync(options.uploadDir + '/' + name),
+        var stats = fs.statSync(options.uploadDir + '/' + filename),
           fileInfo;
-        if (stats.isFile() && name[0] !== '.') {
+        if (stats.isFile()) {
           fileInfo = new FileInfo({
-            name: name,
+            name: filename,
             size: stats.size,
             lastMod: stats.mtime
           });
+          //console.log("fileinfo : "+fileInfo.thumbnailUrl);
           fileInfo.initUrls(req);
           files.push(fileInfo);
         }
@@ -419,3 +434,4 @@ module.exports = function(opts) {
 
   return fileUploader;
 };
+
